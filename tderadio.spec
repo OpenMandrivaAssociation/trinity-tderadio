@@ -1,112 +1,65 @@
-#
-# Please submit bugfixes or comments via http://www.trinitydesktop.org/
-#
-
-%if 0%{?rhel} >= 6 || 0%{?fedora} || 0%{?mdkversion} || 0%{?mgaversion} || 0%{?suse_version}
-%define with_lirc 1
-%endif
+%bcond clang 1
+%bcond lirc 1
+%bcond lame 1
 
 # TDE variables
 %define tde_epoch 2
 %if "%{?tde_version}" == ""
 %define tde_version 14.1.5
 %endif
+%define pkg_rel 2
+
 %define tde_pkg tderadio
 %define tde_prefix /opt/trinity
-%define tde_bindir %{tde_prefix}/bin
-%define tde_datadir %{tde_prefix}/share
-%define tde_docdir %{tde_datadir}/doc
-%define tde_includedir %{tde_prefix}/include
-%define tde_libdir %{tde_prefix}/%{_lib}
-%define tde_mandir %{tde_datadir}/man
-%define tde_tdeappdir %{tde_datadir}/applications/tde
-%define tde_tdedocdir %{tde_docdir}/tde
-%define tde_tdeincludedir %{tde_includedir}/tde
-%define tde_tdelibdir %{tde_libdir}/trinity
 
-%if 0%{?mdkversion}
+
 %undefine __brp_remove_la_files
 %define dont_remove_libtool_files 1
 %define _disable_rebuild_configure 1
-%endif
 
 # fixes error: Empty %files file …/debugsourcefiles.list
 %define _debugsource_template %{nil}
 
 %define tarball_name %{tde_pkg}-trinity
-%global toolchain %(readlink /usr/bin/cc)
 
 
 Name:		trinity-%{tde_pkg}
 Epoch:		%{tde_epoch}
 Version:	0.1.1.1
-Release:	%{?tde_version}_%{?!preversion:1}%{?preversion:0_%{preversion}}%{?dist}
+Release:	%{?tde_version}_%{?!preversion:%{pkg_rel}}%{?preversion:0_%{preversion}}%{?dist}
 Summary:	Comfortable Radio Application for TDE
 Group:		Applications/Utilities
 URL:		http://www.trinitydesktop.org/
 
-%if 0%{?suse_version}
-License:	GPL-2.0+
-%else
 License:	GPLv2+
-%endif
 
-#Vendor:		Trinity Desktop
-#Packager:	Francois Andriot <francois.andriot@free.fr>
-
-Prefix:		%{tde_prefix}
 
 Source0:		https://mirror.ppa.trinitydesktop.org/trinity/releases/R%{tde_version}/main/applications/multimedia/%{tarball_name}-%{tde_version}%{?preversion:~%{preversion}}.tar.xz
 
-BuildRequires:	cmake make
+BuildSystem:  	cmake
+
+BuildOption:    -DCMAKE_BUILD_TYPE="RelWithDebInfo"
+BuildOption:    -DCMAKE_INSTALL_PREFIX=%{tde_prefix}
+BuildOption:    -DINCLUDE_INSTALL_DIR=%{tde_prefix}/include/tde
+BuildOption:    -DSHARE_INSTALL_PREFIX=%{tde_prefix}/share
+BuildOption:    -DBUILD_ALL=ON
+
 BuildRequires:	trinity-tdelibs-devel >= %{tde_version}
 BuildRequires:	trinity-tdebase-devel >= %{tde_version}
 BuildRequires:	desktop-file-utils
 BuildRequires:	gettext
-%if "%{?toolchain}" != "clang"
-BuildRequires:	gcc-c++
-%endif
+
+%{!?with_clang:BuildRequires:	gcc-c++}
+
 BuildRequires:	pkgconfig
 BuildRequires:	fdupes
-
-# SUSE desktop files utility
-%if 0%{?suse_version}
-BuildRequires:	update-desktop-files
-%endif
-
-%if 0%{?opensuse_bs} && 0%{?suse_version}
-# for xdg-menu script
-BuildRequires:	brp-check-trinity
-%endif
 
 BuildRequires:  pkgconfig(sndfile)
 
 %{?with_lirc:BuildRequires:	lirc-devel}
 
 # LAME support
-%if 0%{?opensuse_bs} == 0
-%if 0%{?mdkversion} || 0%{?mgaversion} || 0%{?suse_version} || 0%{?rhel}
-%define with_lame 1
-
-%if 0%{?mgaversion} || 0%{?mdkversion}
-%if 0%{?pclinuxos}
-BuildRequires:		liblame-devel
-%else
-%if 0%{?mgaversion} >= 6
-BuildRequires:		%{_lib}mp3lame-devel
-%else
-BuildRequires:		%{_lib}lame-devel
-%endif
-%endif
-%endif
-%if 0%{?suse_version}
-BuildRequires:	libmp3lame-devel
-%endif
-%if 0%{?fedora} || 0%{?rhel}
-BuildRequires:	lame-devel
-%endif
-%endif
-%endif
+%{?with_lame:BuildRequires:  pkgconfig(lame)}
 
 BuildRequires:  pkgconfig(xrender)
 BuildRequires:  pkgconfig(x11)
@@ -140,95 +93,46 @@ As TDERadio is based on an extendable plugin architecture, contributions
 of new plugins (e.g. Internet Radio Streams, new cool GUIs) are welcome.
 
 
-##########
-
-%if 0%{?suse_version} && 0%{?opensuse_bs} == 0
-%debug_package
-%endif
-
-##########
-
-
-%prep
-%autosetup -n %{tarball_name}-%{tde_version}%{?preversion:~%{preversion}}
-
-
-
-%build
+%conf -p
 unset QTDIR QTINC QTLIB
-export PATH="%{tde_bindir}:${PATH}"
-export PKG_CONFIG_PATH="%{tde_libdir}/pkgconfig:${PKG_CONFIG_PATH}"
-
-if ! rpm -E %%cmake|grep -e 'cd build\|cd ${CMAKE_BUILD_DIR:-build}'; then
-  %__mkdir_p build
-  cd build
-fi
-
-%cmake \
-  -DCMAKE_BUILD_TYPE="RelWithDebInfo" \
-  -DCMAKE_C_FLAGS="${RPM_OPT_FLAGS}" \
-  -DCMAKE_CXX_FLAGS="${RPM_OPT_FLAGS}" \
-  -DCMAKE_SKIP_RPATH=OFF \
-  -DCMAKE_SKIP_INSTALL_RPATH=OFF \
-  -DCMAKE_SKIP_INSTALL_RPATH=OFF \
-  -DCMAKE_INSTALL_RPATH="%{tde_libdir}" \
-  -DCMAKE_VERBOSE_MAKEFILE=ON \
-  -DWITH_GCC_VISIBILITY=OFF \
-  \
-  -DCMAKE_INSTALL_PREFIX=%{tde_prefix} \
-  -DBIN_INSTALL_DIR=%{tde_bindir} \
-  -DINCLUDE_INSTALL_DIR=%{tde_tdeincludedir} \
-  -DLIB_INSTALL_DIR=%{tde_libdir} \
-  -DSHARE_INSTALL_PREFIX=%{tde_datadir} \
-  \
-  -DBUILD_ALL=ON \
-  ..
-
-%__make %{?_smp_mflags}
+export PATH="%{tde_prefix}/bin:${PATH}"
+export PKG_CONFIG_PATH="%{tde_prefix}/%{_lib}/pkgconfig:${PKG_CONFIG_PATH}"
 
 
-%install
-export PATH="%{tde_bindir}:${PATH}"
-%__make install DESTDIR=%{buildroot} -C build
-
-# Updates applications categories for openSUSE
-%if 0%{?suse_version}
-%suse_update_desktop_file -G "Radio Tuner" %{tde_pkg} AudioVideo Tuner
-%endif
-
+%install -a
 # Remove devel files
-%__rm -f %{?buildroot}%{tde_libdir}/libtderadio.la
-%__rm -f %{?buildroot}%{tde_libdir}/libtderadio.so
+%__rm -f %{?buildroot}%{tde_prefix}/%{_lib}/libtderadio.la
+%__rm -f %{?buildroot}%{tde_prefix}/%{_lib}/libtderadio.so
 
 # Remove pixmas
-%__rm -fr %{?buildroot}%{tde_datadir}/pixmaps/
+%__rm -fr %{?buildroot}%{tde_prefix}/share/pixmaps/
 
 
 %files
 %defattr(-,root,root,-)
-%{tde_bindir}/convert-presets
-%{tde_bindir}/tderadio
-%{tde_libdir}/libtderadio.so.0
-%{tde_libdir}/libtderadio.so.0.0.0
-%dir %{tde_libdir}/tderadio
-%dir %{tde_libdir}/tderadio/plugins
-%{tde_libdir}/tderadio/plugins/*.la
-%{tde_libdir}/tderadio/plugins/*.so
-%{tde_tdeappdir}/tderadio.desktop
-%{tde_datadir}/apps/tderadio/
-%dir %{tde_datadir}/icons/hicolor/256x256
-%dir %{tde_datadir}/icons/hicolor/256x256/actions
-%{tde_datadir}/icons/hicolor/*/*/tderadio*.png
-%{tde_datadir}/icons/locolor/*/*/tderadio*.png
-%lang(de) %{tde_datadir}/locale/de/LC_MESSAGES/*.mo
-%lang(es) %{tde_datadir}/locale/es/LC_MESSAGES/*.mo
-%lang(it) %{tde_datadir}/locale/it/LC_MESSAGES/*.mo
-%lang(ka) %{tde_datadir}/locale/ka/LC_MESSAGES/*.mo
-%lang(nl) %{tde_datadir}/locale/nl/LC_MESSAGES/*.mo
-%lang(pl) %{tde_datadir}/locale/pl/LC_MESSAGES/*.mo
-%lang(pt) %{tde_datadir}/locale/pt/LC_MESSAGES/*.mo
-%lang(ru) %{tde_datadir}/locale/ru/LC_MESSAGES/*.mo
-%{tde_tdedocdir}/HTML/en/tderadio/
-%{tde_mandir}/man1/convert-presets.1*
-%{tde_mandir}/man1/tderadio.1*
+%{tde_prefix}/bin/convert-presets
+%{tde_prefix}/bin/tderadio
+%{tde_prefix}/%{_lib}/libtderadio.so.0
+%{tde_prefix}/%{_lib}/libtderadio.so.0.0.0
+%dir %{tde_prefix}/%{_lib}/tderadio
+%dir %{tde_prefix}/%{_lib}/tderadio/plugins
+%{tde_prefix}/%{_lib}/tderadio/plugins/*.la
+%{tde_prefix}/%{_lib}/tderadio/plugins/*.so
+%{tde_prefix}/share/applications/tde/tderadio.desktop
+%{tde_prefix}/share/apps/tderadio/
+%dir %{tde_prefix}/share/icons/hicolor/256x256
+%dir %{tde_prefix}/share/icons/hicolor/256x256/actions
+%{tde_prefix}/share/icons/hicolor/*/*/tderadio*.png
+%{tde_prefix}/share/icons/locolor/*/*/tderadio*.png
+%lang(de) %{tde_prefix}/share/locale/de/LC_MESSAGES/*.mo
+%lang(es) %{tde_prefix}/share/locale/es/LC_MESSAGES/*.mo
+%lang(it) %{tde_prefix}/share/locale/it/LC_MESSAGES/*.mo
+%lang(ka) %{tde_prefix}/share/locale/ka/LC_MESSAGES/*.mo
+%lang(nl) %{tde_prefix}/share/locale/nl/LC_MESSAGES/*.mo
+%lang(pl) %{tde_prefix}/share/locale/pl/LC_MESSAGES/*.mo
+%lang(pt) %{tde_prefix}/share/locale/pt/LC_MESSAGES/*.mo
+%lang(ru) %{tde_prefix}/share/locale/ru/LC_MESSAGES/*.mo
+%{tde_prefix}/share/doc/tde/HTML/en/tderadio/
+%{tde_prefix}/share/man/man1/convert-presets.1*
+%{tde_prefix}/share/man/man1/tderadio.1*
 
